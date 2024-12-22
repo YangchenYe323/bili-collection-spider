@@ -237,19 +237,6 @@ async fn draw_item<T: Serialize + ?Sized>(
     let body = res.json().await.unwrap();
 
     body
-
-    // let mut headers = header::HeaderMap::new();
-    // headers.insert("Origin", "https://www.bilibili.com".parse().unwrap());
-    // headers.insert("Referer", "https://www.bilibili.com/".parse().unwrap());
-    // headers.insert("Cookie", "buvid3=038521C9-95DB-0E35-AFFF-773C6561492E04403infoc; DedeUserID=3546807745383106; DedeUserID__ckMd5=fb2f6ef66d42773c; bili_ticket_expires=1734828996; SESSDATA=ca3c7bc6%2C1750121857%2Cd6b89%2Ac1CjAqrB2hIYI4aFaJVut0t_PlKG4emNTqIhFPysD4-60HoGkWOM7DFp95CQqKSylEFGoSVmV1ekdCTktGcWVaNEp0WFRQUjQ1MXJ6YjhWWjlQUGZWUlB3MDRTZE51WlQ0d3B1WEY2cWJENUV3M3Y0UDNqdktRYUw4MDhZUE9KRG1pYXRQQVo2X1lRIIEC; bili_jct=dbb4f3571ba18aaf1d4c207d8016b83b;".parse().unwrap());
-    // headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36".parse().unwrap());
-    // let req = client
-    //     .post("https://api.bilibili.com/x/vas/dlc_act/lottery/draw_item")
-    //     .headers(headers)
-    //     .form(&param)
-    //     .build()
-    //     .unwrap();
-    // let res = client.execute(req).await.unwrap();
 }
 
 fn check_draw_item_response(body: &Value) {
