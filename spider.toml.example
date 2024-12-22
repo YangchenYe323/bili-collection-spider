@@ -1,0 +1,11 @@
+[lottery]
+act_id = 100309
+lottery_id = 100310
+num_draw = 1
+
+[cookie]
+SESSDATA = "f0ae382b%2C1748534742%2C0e72c7c1"
+bili_jct = "e306d611ee93ca2774e61ddff9d6f7f9"
+DedeUserID = "3546807745383106"
+DedeUserID__ckMd5 = "fb2f6ef66d42773c"
+expires = 1748534742
