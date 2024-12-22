@@ -1,4 +1,6 @@
 /target
 
-spider.toml
+*.toml
+!Cargo.toml
+
 *.json

@@ -76,85 +76,78 @@ async fn main() {
         .unwrap();
     info!("获取到收藏集商品ID={}", goods_id);
 
-    info!("购买收藏集抽取次数 {} 次", config.lottery.num_draw);
-    let form = create_order_form(
-        config.lottery.act_id,
-        config.lottery.lottery_id,
-        &config.cookie.bili_jct,
-        goods_id,
-        config.lottery.num_draw,
-    );
-    let res = client
-        .post("https://api.live.bilibili.com/xlive/revenue/v1/order/createOrder")
-        .header("Cookie", format!("SESSDATA={}", config.cookie.sess_data))
-        .form(&form)
-        .send()
-        .await
-        .unwrap();
-    let body: Value = res.json().await.unwrap();
-    if body["code"].as_i64().unwrap() != 0 {
-        let s = serde_json::to_string_pretty(&body).unwrap();
-        error!("购买抽取次数失败，但愿你已经买好了...\n{}", s)
-    } else {
-        info!("成功购买抽取次数 {} 次", config.lottery.num_draw)
+    run(&client, &config.lottery, &config.cookie, buvid3, goods_id).await;
+}
+
+async fn run(client: &Client, lottery: &Lottery, cookie: &Cookie, buvid3: &str, goods_id: i64) {
+    let cookie_str = format!("buvid3={}; DedeUserID={}; DedeUserID__ckMd5={}; bili_ticket_expires={}; SESSDATA={}; bili_jct={};", buvid3, cookie.dede_userid, cookie.dede_userid_ckmd5, cookie.expires, cookie.sess_data, cookie.bili_jct);
+    let ten_draw_form = draw_item_form(lottery.act_id, lottery.lottery_id, &cookie.bili_jct, 10);
+    let five_draw_form = draw_item_form(lottery.act_id, lottery.lottery_id, &cookie.bili_jct, 5);
+    let single_draw_form = draw_item_form(lottery.act_id, lottery.lottery_id, &cookie.bili_jct, 1);
+
+    loop {
+        info!("购买收藏集抽取次数 {} 次", lottery.num_draw);
+        let form = create_order_form(
+            lottery.act_id,
+            lottery.lottery_id,
+            &cookie.bili_jct,
+            goods_id,
+            lottery.num_draw,
+        );
+        let res = client
+            .post("https://api.live.bilibili.com/xlive/revenue/v1/order/createOrder")
+            .header("Cookie", format!("SESSDATA={}", cookie.sess_data))
+            .form(&form)
+            .send()
+            .await
+            .unwrap();
+        let body: Value = res.json().await.unwrap();
+        if body["code"].as_i64().unwrap() != 0 {
+            let s = serde_json::to_string_pretty(&body).unwrap();
+            error!("购买抽取次数失败: {}", s);
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            continue;
+        }
+        info!("成功购买抽取次数 {} 次", lottery.num_draw);
+        break;
     }
+
+    let mut total_draw_left = lottery.num_draw;
 
     info!("开始抽收藏集");
+    loop {
+        let (num_ten_draws, num_five_draws, num_single_draws) = {
+            let tens = total_draw_left / 10;
+            let fives = (total_draw_left % 10) / 5;
+            let singles = total_draw_left % 5;
+            (tens, fives, singles)
+        };
 
-    let (num_ten_draws, num_five_draws, num_single_draws) = {
-        let total = config.lottery.num_draw;
-        let tens = total / 10;
-        let fives = (total % 10) / 5;
-        let singles = total % 5;
-        (tens, fives, singles)
-    };
+        for _ in 0..num_ten_draws {
+            info!("抽十次...");
+            let data = draw_item(&client, &cookie_str, &ten_draw_form).await;
+            total_draw_left -= check_draw_item_response(&data);
+            tokio::time::sleep(Duration::from_millis(500)).await
+        }
 
-    for _ in 0..num_ten_draws {
-        let form = draw_item_form(
-            config.lottery.act_id,
-            config.lottery.lottery_id,
-            &config.cookie.bili_jct,
-            10,
-        );
+        for _ in 0..num_five_draws {
+            info!("抽五次...");
+            let data = draw_item(&client, &cookie_str, &five_draw_form).await;
+            total_draw_left -= check_draw_item_response(&data);
+            tokio::time::sleep(Duration::from_millis(500)).await
+        }
 
-        info!("抽十次...");
+        for _ in 0..num_single_draws {
+            info!("抽一次...");
+            let data = draw_item(&client, &cookie_str, &single_draw_form).await;
+            total_draw_left -= check_draw_item_response(&data);
+            tokio::time::sleep(Duration::from_millis(500)).await
+        }
 
-        let data = draw_item(&client, &config.cookie, buvid3, &form).await;
-        check_draw_item_response(&data);
-
-        tokio::time::sleep(Duration::from_millis(500)).await
-    }
-
-    for _ in 0..num_five_draws {
-        let form = draw_item_form(
-            config.lottery.act_id,
-            config.lottery.lottery_id,
-            &config.cookie.bili_jct,
-            5,
-        );
-
-        info!("抽五次...");
-
-        let data = draw_item(&client, &config.cookie, buvid3, &form).await;
-        check_draw_item_response(&data);
-
-        tokio::time::sleep(Duration::from_millis(500)).await
-    }
-
-    for _ in 0..num_single_draws {
-        let form = draw_item_form(
-            config.lottery.act_id,
-            config.lottery.lottery_id,
-            &config.cookie.bili_jct,
-            1,
-        );
-
-        info!("抽一次...");
-
-        let data = draw_item(&client, &config.cookie, buvid3, &form).await;
-        check_draw_item_response(&data);
-
-        tokio::time::sleep(Duration::from_millis(500)).await
+        if total_draw_left == 0 {
+            info!("全部抽取完毕");
+            return;
+        }
     }
 }
 
@@ -188,6 +181,7 @@ fn create_order_form(
     form_data.insert("goods_num".to_string(), goods_num.to_string());
     form_data.insert("ios_bp".to_string(), "0".to_string());
 
+    // 需要的bp数量
     let num_bp = goods_num * 9900;
     form_data.insert("pay_bp".to_string(), num_bp.to_string());
     form_data.insert("platform".to_string(), "pc".to_string());
@@ -217,17 +211,12 @@ async fn get_config_from_file(path: impl AsRef<Path>) -> Config {
     toml::from_str(&content).unwrap()
 }
 
-async fn draw_item<T: Serialize + ?Sized>(
-    client: &Client,
-    cookie: &Cookie,
-    buvid3: &str,
-    form: &T,
-) -> Value {
+async fn draw_item<T: Serialize + ?Sized>(client: &Client, cookie: &str, form: &T) -> Value {
     let res = client
         .post("https://api.bilibili.com/x/vas/dlc_act/lottery/draw_item")
         .header("Origin", "https://www.bilibili.com")
         .header("Referer", "https://www.bilibili.com")
-        .header("Cookie", format!("buvid3={}; DedeUserID={}; DedeUserID__ckMd5={}; bili_ticket_expires={}; SESSDATA={}; bili_jct={};", buvid3, cookie.dede_userid, cookie.dede_userid_ckmd5, cookie.expires, cookie.sess_data, cookie.bili_jct))
+        .header("Cookie", cookie)
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
         .form(form)
         .send()
@@ -239,21 +228,21 @@ async fn draw_item<T: Serialize + ?Sized>(
     body
 }
 
-fn check_draw_item_response(body: &Value) {
+fn check_draw_item_response(body: &Value) -> i32 {
     let Some(code) = body.get("code").and_then(Value::as_i64) else {
         error!("请求错误: {:?}", body);
-        return;
+        return 0;
     };
 
     if code != 0 {
         error!("请求错误: {:?}", body);
-        return;
+        return 0;
     }
 
     let error_code = body["data"]["err_code"].as_i64().unwrap();
     if error_code != 0 {
         error!("抽奖失败: {:?}", body);
-        return;
+        return 0;
     }
 
     if let Some(items) = body["data"]["item_list"].as_array() {
@@ -261,7 +250,12 @@ fn check_draw_item_response(body: &Value) {
             let card_name = item["card_item"]["card_type_info"]["name"]
                 .as_str()
                 .unwrap();
-            info!("抽到了 {} !", card_name);
+            let card_chance = item["card_item"]["card_chance"].as_f64().unwrap();
+            info!("抽到了 {}, 概率 {} !", card_name, card_chance);
         }
+
+        return items.len() as i32;
     }
+
+    return 0;
 }
